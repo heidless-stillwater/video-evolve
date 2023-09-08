@@ -1,84 +1,82 @@
-from flask import Flask
-from flask_restful import Api, Resource, reqparse, abort, fields, marshal_with
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, render_template, request
+from flask_restful import Api, Resource, reqparse, abort
+import datetime
+
+# importing the math library
+import math
 
 app = Flask(__name__)
 api = Api(app)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-db = SQLAlchemy(app)
 
-class VideoModel(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	name = db.Column(db.String(100), nullable=False)
-	views = db.Column(db.Integer, nullable=False)
-	likes = db.Column(db.Integer, nullable=False)
+@app.route('/test')
+def hello():
+    return render_template('index.html', utc_dt=datetime.datetime.utcnow())
 
-	def __repr__(self):
-		return f"Video(name = {name}, views = {views}, likes = {likes})"
+class HelloWorld(Resource):
+  def get(self, name, age):
+ #   return {"data": "Hello World"}
+ #   test = test*10
+    age_seconds = age*31536000
+    #lifetimes = age * 2**age
+    # calculating the log2(number)
+    lifetimes = math.log2(age_seconds)
+    # displaying the result
+    #print(f"The logarithm of base 2, of {number} is = {result}")
+    return {"name": name, "age": age, "age_seconds": age_seconds, "lifetimes": lifetimes}
+  
+  def post(self):
+    return {"data": "posted"}
 
-video_put_args = reqparse.RequestParser()
-video_put_args.add_argument("name", type=str, help="Name of the video is required", required=True)
-video_put_args.add_argument("views", type=int, help="Views of the video", required=True)
-video_put_args.add_argument("likes", type=int, help="Likes on the video", required=True)
+api.add_resource(HelloWorld, '/helloworld/<string:name>/<int:age>')
 
-video_update_args = reqparse.RequestParser()
-video_update_args.add_argument("name", type=str, help="Name of the video is required")
-video_update_args.add_argument("views", type=int, help="Views of the video")
-video_update_args.add_argument("likes", type=int, help="Likes on the video")
-
-resource_fields = {
-	'id': fields.Integer,
-	'name': fields.String,
-	'views': fields.Integer,
-	'likes': fields.Integer
+names = {
+  "tim":  {"age":19, "gender":"male"},
+  "bill": {"age":58, "gender":"female"}
 }
 
+class Name(Resource):
+  def get(self, name):
+    return names[name]
+
+api.add_resource(Name, '/name/<string:name>')
+
+video_put_args = reqparse.RequestParser()
+video_put_args.add_argument("name", type=str, help="Name of Video is required", required=True)
+video_put_args.add_argument("likes", type=int, help="Num Likes is required", required=True)
+video_put_args.add_argument("views", type=int, help="Num Views id required", required=True)
+
+videos = {}
+
+def abort_if_video_id_doesnt_exist(video_id):
+  if video_id not in videos:
+    abort(404, message="Video does not exist...")
+
+def abort_if_video_id_exists(video_id):
+  if video_id in videos:
+    abort(409, message="Video exists...")
+
 class Video(Resource):
-	@marshal_with(resource_fields)
-	def get(self, video_id):
-		result = VideoModel.query.filter_by(id=video_id).first()
-		if not result:
-			abort(404, message="Could not find video with that id")
-		return result
+  def get(self, video_id):
+    abort_if_video_id_doesnt_exist(video_id)
+    return videos[video_id]
+  
+  def put(self, video_id):
+    abort_if_video_id_exists(video_id)
+    args = video_put_args.parse_args()
+    videos[video_id] = args
+    return videos[video_id], 201
+  
+  def delete(self, video_id):
+    abort_if_video_id_doesnt_exist(video_id)
+    del videos[video_id]
+    return '', 204    
+    
+    
+    
 
-	@marshal_with(resource_fields)
-	def put(self, video_id):
-		args = video_put_args.parse_args()
-		result = VideoModel.query.filter_by(id=video_id).first()
-		if result:
-			abort(409, message="Video id taken...")
-
-		video = VideoModel(id=video_id, name=args['name'], views=args['views'], likes=args['likes'])
-		db.session.add(video)
-		db.session.commit()
-		return video, 201
-
-	@marshal_with(resource_fields)
-	def patch(self, video_id):
-		args = video_update_args.parse_args()
-		result = VideoModel.query.filter_by(id=video_id).first()
-		if not result:
-			abort(404, message="Video doesn't exist, cannot update")
-
-		if args['name']:
-			result.name = args['name']
-		if args['views']:
-			result.views = args['views']
-		if args['likes']:
-			result.likes = args['likes']
-
-		db.session.commit()
-
-		return result
-
-
-	def delete(self, video_id):
-		abort_if_video_id_doesnt_exist(video_id)
-		del videos[video_id]
-		return '', 204
-
-
-api.add_resource(Video, "/video/<int:video_id>")
-
-if __name__ == "__main__":
-	app.run(debug=True)
+api.add_resource(Video, '/video/<int:video_id>')
+  
+if __name__ == '__main__':
+  app.run(host='0.0.0.0', port=5000, debug=True)
+  
+  
